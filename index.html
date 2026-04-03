@@ -348,7 +348,7 @@
 //     .then(b => Array.from(new Uint8Array(b)).map(x => x.toString(16).padStart(2,'0')).join(''))
 //     .then(console.log)
 // ============================================================
-const PASS_HASH = 'df2b6456651f1b0864f9df7d02b40636783cd5606c1e346d917d8f7bbcf478f0'; // default: dashboard42
+const PASS_HASH = 'aaf68675c4bea5600c273f6d4371e8d1b9f383a6dd96db30d628cf77dd91c09c'; // PIN: 3708
 
 async function sha256(str) {
     const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
