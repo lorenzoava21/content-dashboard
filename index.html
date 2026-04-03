@@ -257,17 +257,19 @@
         }
         .login-box h1 { font-size: 20px; margin-bottom: 6px; }
         .login-box p { font-size: 13px; color: var(--text-secondary); margin-bottom: 20px; }
-        .login-box input {
-            width: 100%;
-            padding: 10px 14px;
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            font-size: 16px;
-            margin-bottom: 12px;
-            outline: none;
+        .pin-digit {
+            width: 48px;
+            height: 56px;
+            border: 2px solid var(--border);
+            border-radius: 10px;
+            font-size: 24px;
+            font-weight: 700;
             text-align: center;
+            outline: none;
+            caret-color: transparent;
+            -webkit-text-security: disc;
         }
-        .login-box input:focus { border-color: #1976d2; }
+        .pin-digit:focus { border-color: #1976d2; }
         .login-box .error { color: #e53935; font-size: 12px; margin-bottom: 10px; display: none; }
         .login-box button { width: 100%; }
 
@@ -286,9 +288,15 @@
 <div id="loginScreen">
     <div class="login-box">
         <h1>Content Dashboard</h1>
-        <p>Enter password to continue</p>
-        <input type="password" id="loginPass" placeholder="Password" autocomplete="off">
-        <div class="error" id="loginError">Wrong password</div>
+        <p>Enter PIN to continue</p>
+        <div style="display:flex; justify-content:center; gap:8px; margin-bottom:12px;">
+            <input class="pin-digit" type="tel" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="off">
+            <input class="pin-digit" type="tel" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="off">
+            <input class="pin-digit" type="tel" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="off">
+            <input class="pin-digit" type="tel" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="off">
+        </div>
+        <input type="hidden" id="loginPass">
+        <div class="error" id="loginError">Wrong PIN</div>
         <button class="btn-primary" id="btnLogin">Enter</button>
     </div>
 </div>
@@ -363,8 +371,8 @@ async function tryLogin() {
         unlock();
     } else {
         document.getElementById('loginError').style.display = 'block';
-        document.getElementById('loginPass').value = '';
-        document.getElementById('loginPass').focus();
+        document.querySelectorAll('.pin-digit').forEach(d => d.value = '');
+        document.querySelector('.pin-digit').focus();
     }
 }
 
@@ -374,14 +382,52 @@ function unlock() {
     init();
 }
 
+// PIN input logic
+const pinDigits = document.querySelectorAll('.pin-digit');
+
+pinDigits.forEach((input, i) => {
+    input.addEventListener('input', () => {
+        input.value = input.value.replace(/[^0-9]/g, '');
+        if (input.value && i < pinDigits.length - 1) {
+            pinDigits[i + 1].focus();
+        }
+        // Auto-submit when all 4 digits entered
+        const pin = Array.from(pinDigits).map(d => d.value).join('');
+        if (pin.length === 4) {
+            document.getElementById('loginPass').value = pin;
+            tryLogin();
+        }
+    });
+    input.addEventListener('keydown', e => {
+        if (e.key === 'Backspace' && !input.value && i > 0) {
+            pinDigits[i - 1].focus();
+            pinDigits[i - 1].value = '';
+        }
+    });
+    input.addEventListener('paste', e => {
+        e.preventDefault();
+        const text = (e.clipboardData || window.clipboardData).getData('text').replace(/[^0-9]/g, '');
+        for (let j = 0; j < pinDigits.length && j < text.length; j++) {
+            pinDigits[j].value = text[j];
+        }
+        const pin = Array.from(pinDigits).map(d => d.value).join('');
+        if (pin.length === 4) {
+            document.getElementById('loginPass').value = pin;
+            tryLogin();
+        }
+    });
+});
+
 // Check if already authed this session
 if (sessionStorage.getItem('dash_auth') === PASS_HASH) {
     unlock();
 } else {
-    document.getElementById('loginPass').addEventListener('keydown', e => {
-        if (e.key === 'Enter') tryLogin();
+    pinDigits[0].focus();
+    document.getElementById('btnLogin').addEventListener('click', () => {
+        const pin = Array.from(pinDigits).map(d => d.value).join('');
+        document.getElementById('loginPass').value = pin;
+        tryLogin();
     });
-    document.getElementById('btnLogin').addEventListener('click', tryLogin);
 }
 
 // ============================================================
