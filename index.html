@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Content Dashboard</title>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+    <style>
+        :root {
+            --todo: #e0e0e0;
+            --todo-text: #666;
+            --wip: #ffb74d;
+            --wip-text: #7a4700;
+            --scheduled: #66bb6a;
+            --scheduled-text: #1b5e20;
+            --published: #42a5f5;
+            --published-text: #0d47a1;
+            --bg: #f5f5f5;
+            --surface: #ffffff;
+            --text: #212121;
+            --text-secondary: #757575;
+            --border: #e8e8e8;
+            --current-week: rgba(66, 165, 245, 0.08);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+        h1 { font-size: 22px; font-weight: 700; }
+
+        /* Buttons */
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.15s;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .btn-primary { background: #1976d2; color: white; }
+        .btn-primary:hover { background: #1565c0; }
+        .btn-nav {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            padding: 6px 12px;
+            font-size: 16px;
+            line-height: 1;
+        }
+        .btn-nav:hover { background: #f0f0f0; }
+        .btn-secondary { background: #f0f0f0; color: var(--text); }
+        .btn-secondary:hover { background: #e4e4e4; }
+        .btn-remove {
+            background: none;
+            color: #ccc;
+            padding: 0 4px;
+            font-size: 14px;
+            opacity: 0;
+            transition: opacity 0.15s;
+            line-height: 1;
+        }
+        .btn-remove:hover { color: #e53935; }
+
+        /* Navigation */
+        .nav-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+        .nav-row .range-label {
+            font-size: 13px;
+            color: var(--text-secondary);
+            min-width: 140px;
+            text-align: center;
+        }
+
+        /* Grid */
+        .grid-container {
+            overflow-x: auto;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04);
+            background: var(--surface);
+            -webkit-overflow-scrolling: touch;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 500px;
+        }
+        th, td {
+            padding: 10px 12px;
+            text-align: center;
+            border-bottom: 1px solid var(--border);
+        }
+        th {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-secondary);
+            background: #fafafa;
+        }
+        th.col-project, td.col-project {
+            text-align: left;
+            position: sticky;
+            left: 0;
+            z-index: 2;
+            min-width: 130px;
+            white-space: nowrap;
+        }
+        th.col-project { background: #fafafa; z-index: 3; }
+        td.col-project { background: var(--surface); font-weight: 600; font-size: 14px; }
+        .project-inner {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .project-inner:hover .btn-remove { opacity: 1; }
+
+        th.col-week { min-width: 80px; }
+        .week-date {
+            display: block;
+            font-size: 10px;
+            font-weight: 400;
+            color: #aaa;
+            margin-top: 2px;
+            text-transform: none;
+            letter-spacing: 0;
+        }
+        .col-current { background: var(--current-week) !important; }
+
+        /* Status cells */
+        td.col-status { cursor: pointer; user-select: none; -webkit-user-select: none; }
+        td.col-status:active .badge { transform: scale(0.9); }
+        .badge {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            min-width: 64px;
+            transition: transform 0.1s;
+        }
+        .s-todo      { background: var(--todo);      color: var(--todo-text); }
+        .s-wip       { background: var(--wip);       color: var(--wip-text); }
+        .s-scheduled { background: var(--scheduled); color: var(--scheduled-text); }
+        .s-published { background: var(--published); color: var(--published-text); }
+
+        /* Legend */
+        .legend {
+            display: flex;
+            gap: 16px;
+            margin-top: 16px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+        .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+        /* Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.4);
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal {
+            background: var(--surface);
+            border-radius: 16px;
+            padding: 24px;
+            width: 90%;
+            max-width: 340px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+        }
+        .modal h2 { font-size: 17px; margin-bottom: 14px; }
+        .modal input {
+            width: 100%;
+            padding: 10px 14px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 16px;
+            margin-bottom: 14px;
+            outline: none;
+        }
+        .modal input:focus { border-color: #1976d2; }
+        .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+        /* Notices */
+        .notice {
+            border-radius: 10px;
+            padding: 14px 18px;
+            margin-bottom: 16px;
+            font-size: 13px;
+            display: none;
+        }
+        .notice-warn { background: #fff3e0; border: 1px solid #ffe0b2; color: #e65100; }
+        .notice-info { background: #e3f2fd; border: 1px solid #bbdefb; color: #1565c0; }
+
+        .empty-state {
+            text-align: center;
+            padding: 50px 20px;
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        /* Login screen */
+        #app { display: none; }
+        #loginScreen {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: -20px;
+            padding: 20px;
+        }
+        .login-box {
+            background: var(--surface);
+            border-radius: 16px;
+            padding: 32px;
+            width: 100%;
+            max-width: 320px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+            text-align: center;
+        }
+        .login-box h1 { font-size: 20px; margin-bottom: 6px; }
+        .login-box p { font-size: 13px; color: var(--text-secondary); margin-bottom: 20px; }
+        .login-box input {
+            width: 100%;
+            padding: 10px 14px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 16px;
+            margin-bottom: 12px;
+            outline: none;
+            text-align: center;
+        }
+        .login-box input:focus { border-color: #1976d2; }
+        .login-box .error { color: #e53935; font-size: 12px; margin-bottom: 10px; display: none; }
+        .login-box button { width: 100%; }
+
+        @media (max-width: 600px) {
+            body { padding: 12px; }
+            h1 { font-size: 18px; }
+            th, td { padding: 8px 6px; }
+            .badge { padding: 4px 8px; font-size: 9px; min-width: 54px; }
+            td.col-project { font-size: 13px; min-width: 100px; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Login screen -->
+<div id="loginScreen">
+    <div class="login-box">
+        <h1>Content Dashboard</h1>
+        <p>Enter password to continue</p>
+        <input type="password" id="loginPass" placeholder="Password" autocomplete="off">
+        <div class="error" id="loginError">Wrong password</div>
+        <button class="btn-primary" id="btnLogin">Enter</button>
+    </div>
+</div>
+
+<!-- Main app (hidden until authenticated) -->
+<div id="app">
+
+<div class="notice notice-warn" id="setupNotice">
+    <strong>Setup required:</strong> Replace the <code>firebaseConfig</code> in this file with your Firebase project config. See instructions below the dashboard.
+</div>
+
+<div class="notice notice-info" id="demoNotice">
+    <strong>Demo mode</strong> — Data is local only and won't persist. Configure Firebase to sync across devices.
+</div>
+
+<div class="header">
+    <h1>Content Dashboard</h1>
+    <button class="btn-primary" id="btnAddProject">+ Project</button>
+</div>
+
+<div class="nav-row">
+    <button class="btn-nav" id="btnPrev">&larr;</button>
+    <span class="range-label" id="rangeLabel"></span>
+    <button class="btn-nav" id="btnNext">&rarr;</button>
+    <button class="btn-nav" id="btnToday" style="font-size:12px; padding:6px 10px;">Today</button>
+</div>
+
+<div class="grid-container">
+    <table id="grid"></table>
+</div>
+
+<div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:var(--todo)"></div> To Do</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--wip)"></div> WIP</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--scheduled)"></div> Scheduled</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--published)"></div> Published</div>
+</div>
+
+</div><!-- end #app -->
+
+<div class="modal-overlay" id="modal">
+    <div class="modal">
+        <h2>Add Project</h2>
+        <input type="text" id="inputProject" placeholder="Project name">
+        <div class="modal-actions">
+            <button class="btn-secondary" id="btnCancel">Cancel</button>
+            <button class="btn-primary" id="btnConfirmAdd">Add</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// ============================================================
+// PASSWORD — Change this hash to use a different password.
+// To generate: run in browser console:
+//   crypto.subtle.digest('SHA-256', new TextEncoder().encode('YOUR_PASSWORD'))
+//     .then(b => Array.from(new Uint8Array(b)).map(x => x.toString(16).padStart(2,'0')).join(''))
+//     .then(console.log)
+// ============================================================
+const PASS_HASH = 'df2b6456651f1b0864f9df7d02b40636783cd5606c1e346d917d8f7bbcf478f0'; // default: dashboard42
+
+async function sha256(str) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function tryLogin() {
+    const pass = document.getElementById('loginPass').value;
+    const hash = await sha256(pass);
+    if (hash === PASS_HASH) {
+        sessionStorage.setItem('dash_auth', hash);
+        unlock();
+    } else {
+        document.getElementById('loginError').style.display = 'block';
+        document.getElementById('loginPass').value = '';
+        document.getElementById('loginPass').focus();
+    }
+}
+
+function unlock() {
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    init();
+}
+
+// Check if already authed this session
+if (sessionStorage.getItem('dash_auth') === PASS_HASH) {
+    unlock();
+} else {
+    document.getElementById('loginPass').addEventListener('keydown', e => {
+        if (e.key === 'Enter') tryLogin();
+    });
+    document.getElementById('btnLogin').addEventListener('click', tryLogin);
+}
+
+// ============================================================
+// CONFIG — Replace this with your Firebase project config
+// ============================================================
+const firebaseConfig = {
+    apiKey: "AIzaSyALHW7tFJUDAYaubf-Uh1-iWcYcwFGiK_0",
+    authDomain: "tracker-42.firebaseapp.com",
+    databaseURL: "https://tracker-42-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "tracker-42",
+    storageBucket: "tracker-42.firebasestorage.app",
+    messagingSenderId: "105214635841",
+    appId: "1:105214635841:web:f6e66202d17ffda1a8fbc0"
+};
+// ============================================================
+
+const LABELS = { todo: 'To Do', wip: 'WIP', scheduled: 'Scheduled', published: 'Published' };
+const CYCLE = { todo: 'wip', wip: 'scheduled', scheduled: 'todo', published: 'todo' };
+const VISIBLE = 8;
+
+let db = null;
+let live = false;
+let projects = [];
+let data = {};
+let offset = 0;
+
+// --- ISO week helpers ---
+function isoWeek(d) {
+    const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    date.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay() || 7));
+    const y = date.getUTCFullYear();
+    const jan1 = new Date(Date.UTC(y, 0, 1));
+    const w = Math.ceil(((date - jan1) / 86400000 + 1) / 7);
+    return { y, w };
+}
+
+function weekToDate(y, w) {
+    const jan4 = new Date(Date.UTC(y, 0, 4));
+    const mon = new Date(jan4);
+    mon.setUTCDate(jan4.getUTCDate() - (jan4.getUTCDay() || 7) + 1 + (w - 1) * 7);
+    return mon;
+}
+
+function wk(y, w) { return y + '-W' + String(w).padStart(2, '0'); }
+
+function now() { return isoWeek(new Date()); }
+
+function shift(y, w, n) {
+    const d = weekToDate(y, w);
+    d.setUTCDate(d.getUTCDate() + n * 7);
+    return isoWeek(d);
+}
+
+function fmtDate(y, w) {
+    const d = weekToDate(y, w);
+    return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()] + ' ' + d.getUTCDate();
+}
+
+function visibleWeeks() {
+    const c = now();
+    const weeks = [];
+    for (let i = 0; i < VISIBLE; i++) {
+        weeks.push(shift(c.y, c.w, offset - 2 + i));
+    }
+    return weeks;
+}
+
+// --- Sanitize Firebase key ---
+function fbKey(s) { return s.replace(/[.#$/\[\]]/g, '_'); }
+
+// --- Escape HTML ---
+function esc(s) {
+    const el = document.createElement('span');
+    el.textContent = s;
+    return el.innerHTML;
+}
+
+// --- Status with auto-publish ---
+function getStatus(project, weekKey) {
+    const s = (data[project] && data[project][weekKey]) || 'todo';
+    const cur = now();
+    if (s === 'scheduled' && weekKey <= wk(cur.y, cur.w)) return 'published';
+    return s;
+}
+
+// --- Firebase init ---
+function init() {
+    const isDemo = firebaseConfig.apiKey === 'YOUR_API_KEY';
+
+    if (isDemo) {
+        document.getElementById('setupNotice').style.display = 'block';
+        document.getElementById('demoNotice').style.display = 'block';
+        projects = ['Artaxios', 'Lixoriu', 'Kaizenawa'];
+        render();
+        return;
+    }
+
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.database();
+    live = true;
+
+    db.ref('projects').on('value', snap => {
+        projects = snap.val() ? Object.keys(snap.val()).sort() : [];
+        render();
+    });
+
+    db.ref('statuses').on('value', snap => {
+        data = snap.val() || {};
+        autoPublish();
+        render();
+    });
+}
+
+function autoPublish() {
+    const cur = wk(now().y, now().w);
+    for (const p of projects) {
+        if (!data[p]) continue;
+        for (const [k, v] of Object.entries(data[p])) {
+            if (v === 'scheduled' && k <= cur) {
+                if (live) db.ref('statuses/' + fbKey(p) + '/' + k).set('published');
+                data[p][k] = 'published';
+            }
+        }
+    }
+}
+
+// --- Actions ---
+function setStatus(project, weekKey) {
+    const raw = (data[project] && data[project][weekKey]) || 'todo';
+    const displayed = getStatus(project, weekKey);
+    const next = CYCLE[displayed];
+
+    if (live) {
+        const ref = db.ref('statuses/' + fbKey(project) + '/' + weekKey);
+        next === 'todo' ? ref.remove() : ref.set(next);
+    } else {
+        if (!data[project]) data[project] = {};
+        next === 'todo' ? delete data[project][weekKey] : data[project][weekKey] = next;
+        render();
+    }
+}
+
+function addProject(name) {
+    if (live) {
+        db.ref('projects/' + fbKey(name)).set(true);
+    } else {
+        if (!projects.includes(name)) {
+            projects.push(name);
+            projects.sort();
+        }
+        render();
+    }
+}
+
+function removeProject(name) {
+    if (!confirm('Remove "' + name + '" and all its data?')) return;
+    if (live) {
+        db.ref('projects/' + fbKey(name)).remove();
+        db.ref('statuses/' + fbKey(name)).remove();
+    } else {
+        projects = projects.filter(p => p !== name);
+        delete data[name];
+        render();
+    }
+}
+
+// --- Render ---
+function render() {
+    const weeks = visibleWeeks();
+    const cur = wk(now().y, now().w);
+    const first = weeks[0], last = weeks[weeks.length - 1];
+
+    document.getElementById('rangeLabel').textContent =
+        'W' + first.w + ' ' + first.y + ' \u2014 W' + last.w + ' ' + last.y;
+
+    const table = document.getElementById('grid');
+
+    if (!projects.length) {
+        table.innerHTML = '<tr><td class="empty-state" colspan="99">No projects yet. Click <b>+ Project</b> to start.</td></tr>';
+        return;
+    }
+
+    let h = '<thead><tr><th class="col-project">Project</th>';
+    for (const w of weeks) {
+        const key = wk(w.y, w.w);
+        h += '<th class="col-week' + (key === cur ? ' col-current' : '') + '">'
+           + 'W' + w.w + '<span class="week-date">' + fmtDate(w.y, w.w) + '</span></th>';
+    }
+    h += '</tr></thead><tbody>';
+
+    for (const p of projects) {
+        h += '<tr><td class="col-project"><div class="project-inner">'
+           + esc(p)
+           + '<button class="btn-remove" data-remove="' + esc(p) + '" title="Remove">&times;</button>'
+           + '</div></td>';
+
+        for (const w of weeks) {
+            const key = wk(w.y, w.w);
+            const s = getStatus(p, key);
+            h += '<td class="col-status' + (key === cur ? ' col-current' : '') + '" data-project="' + esc(p) + '" data-week="' + key + '">'
+               + '<span class="badge s-' + s + '">' + LABELS[s] + '</span></td>';
+        }
+        h += '</tr>';
+    }
+
+    h += '</tbody>';
+    table.innerHTML = h;
+}
+
+// --- Event listeners (delegation) ---
+document.getElementById('grid').addEventListener('click', e => {
+    const cell = e.target.closest('.col-status');
+    if (cell) {
+        setStatus(cell.dataset.project, cell.dataset.week);
+        return;
+    }
+    const btn = e.target.closest('.btn-remove');
+    if (btn) removeProject(btn.dataset.remove);
+});
+
+document.getElementById('btnPrev').addEventListener('click', () => { offset -= 4; render(); });
+document.getElementById('btnNext').addEventListener('click', () => { offset += 4; render(); });
+document.getElementById('btnToday').addEventListener('click', () => { offset = 0; render(); });
+
+// Modal
+const modal = document.getElementById('modal');
+const input = document.getElementById('inputProject');
+
+document.getElementById('btnAddProject').addEventListener('click', () => {
+    modal.classList.add('active');
+    setTimeout(() => input.focus(), 100);
+});
+
+function closeModal() {
+    modal.classList.remove('active');
+    input.value = '';
+}
+
+document.getElementById('btnCancel').addEventListener('click', closeModal);
+modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+
+input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+        const name = input.value.trim();
+        if (name) { addProject(name); closeModal(); }
+    }
+    if (e.key === 'Escape') closeModal();
+});
+
+document.getElementById('btnConfirmAdd').addEventListener('click', () => {
+    const name = input.value.trim();
+    if (name) { addProject(name); closeModal(); }
+});
+
+// --- Start is triggered by unlock() after password check ---
+</script>
+
+</body>
+</html>
